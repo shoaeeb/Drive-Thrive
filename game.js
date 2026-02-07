@@ -46,8 +46,8 @@ class DrivingGame {
             canvas: null,
             ctx: null,
             scale: 0.2, // World units to pixels
-            centerX: 100,
-            centerY: 100
+            centerX: 125,
+            centerY: 125
         };
         
         // Weather and time system
@@ -2203,13 +2203,13 @@ class DrivingGame {
     drawMinimapLegend(ctx) {
         // Draw compact legend background at bottom
         ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
-        ctx.fillRect(2, 165, 60, 33);
+        ctx.fillRect(2, 215, 60, 33);
         
         // Legend items - only show Life Mode locations
         const legendItems = [
-            { color: '#FF6B6B', label: 'Food', y: 175 },
-            { color: '#4ECDC4', label: 'Gas', y: 185 },
-            { color: '#FFD93D', label: 'Home', y: 195 }
+            { color: '#FF6B6B', label: 'Food', y: 225 },
+            { color: '#4ECDC4', label: 'Gas', y: 235 },
+            { color: '#FFD93D', label: 'Home', y: 245 }
         ];
         
         ctx.font = '9px Arial';
@@ -2283,7 +2283,7 @@ class DrivingGame {
         this.worldLocations.restaurants.forEach(restaurant => {
             const pos = this.worldToMinimap(restaurant.position.x, restaurant.position.z);
             
-            if (pos.x >= 0 && pos.x <= 200 && pos.y >= 0 && pos.y <= 200) {
+            if (pos.x >= 0 && pos.x <= 250 && pos.y >= 0 && pos.y <= 250) {
                 // Red circle for restaurant
                 ctx.fillStyle = '#FF6B6B';
                 ctx.beginPath();
@@ -2307,7 +2307,7 @@ class DrivingGame {
         this.worldLocations.gasStations.forEach(station => {
             const pos = this.worldToMinimap(station.position.x, station.position.z);
             
-            if (pos.x >= 0 && pos.x <= 200 && pos.y >= 0 && pos.y <= 200) {
+            if (pos.x >= 0 && pos.x <= 250 && pos.y >= 0 && pos.y <= 250) {
                 // Cyan circle for gas station
                 ctx.fillStyle = '#4ECDC4';
                 ctx.beginPath();
@@ -2331,7 +2331,7 @@ class DrivingGame {
         if (this.worldLocations.home) {
             const pos = this.worldToMinimap(this.worldLocations.home.position.x, this.worldLocations.home.position.z);
             
-            if (pos.x >= 0 && pos.x <= 200 && pos.y >= 0 && pos.y <= 200) {
+            if (pos.x >= 0 && pos.x <= 250 && pos.y >= 0 && pos.y <= 250) {
                 // Yellow circle for home
                 ctx.fillStyle = '#FFD93D';
                 ctx.beginPath();
@@ -2358,7 +2358,7 @@ class DrivingGame {
                 const pos = this.worldToMinimap(passenger.pickup.x, passenger.pickup.z);
                 
                 // Check if passenger is visible on minimap
-                if (pos.x >= 0 && pos.x <= 200 && pos.y >= 0 && pos.y <= 200) {
+                if (pos.x >= 0 && pos.x <= 250 && pos.y >= 0 && pos.y <= 250) {
                     // Draw pickup indicator
                     ctx.fillStyle = '#FFFF00';
                     ctx.beginPath();
@@ -2379,7 +2379,7 @@ class DrivingGame {
         const pos = this.worldToMinimap(this.taxiMode.destination.x, this.taxiMode.destination.z);
         
         // Check if destination is visible on minimap
-        if (pos.x >= 0 && pos.x <= 200 && pos.y >= 0 && pos.y <= 200) {
+        if (pos.x >= 0 && pos.x <= 250 && pos.y >= 0 && pos.y <= 250) {
             // Draw destination marker
             ctx.fillStyle = '#00FF00';
             ctx.beginPath();
@@ -2434,7 +2434,7 @@ class DrivingGame {
     
     drawMinimapCompass(ctx) {
         // Draw compass in top-right corner of minimap
-        const compassX = 180;
+        const compassX = 230;
         const compassY = 20;
         const compassRadius = 15;
         
@@ -2471,7 +2471,7 @@ class DrivingGame {
             const pos = this.worldToMinimap(aiCar.position.x, aiCar.position.z);
             
             // Check if AI car is visible on minimap
-            if (pos.x >= 0 && pos.x <= 200 && pos.y >= 0 && pos.y <= 200) {
+            if (pos.x >= 0 && pos.x <= 250 && pos.y >= 0 && pos.y <= 250) {
                 // Draw AI car as smaller blue circles
                 ctx.fillStyle = '#0088FF';
                 ctx.beginPath();
