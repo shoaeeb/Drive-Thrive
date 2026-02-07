@@ -108,6 +108,10 @@ class DrivingGame {
             tripsCompleted: 0
         };
         
+        // Auto-save counter
+        this.autoSaveCounter = 0;
+        this.autoSaveInterval = 1800; // Auto-save every 30 seconds (60fps * 30)
+        
         // Car physics
         this.carPosition = new THREE.Vector3(0, 0.4, 0);
         this.carRotation = 0;
@@ -129,7 +133,88 @@ class DrivingGame {
         
         this.init();
         this.setupEventListeners();
+        this.loadGameProgress(); // Load saved progress
         this.animate();
+    }
+    
+    saveGameProgress() {
+        const saveData = {
+            lifeMode: this.lifeMode,
+            gameTime: this.gameTime,
+            dailyGoals: this.dailyGoals,
+            taxiMode: {
+                totalEarnings: this.taxiMode.totalEarnings
+            },
+            carPosition: {
+                x: this.carPosition.x,
+                y: this.carPosition.y,
+                z: this.carPosition.z
+            },
+            carRotation: this.carRotation
+        };
+        
+        localStorage.setItem('taxiLifeGameSave', JSON.stringify(saveData));
+        console.log('Game progress saved!');
+    }
+    
+    loadGameProgress() {
+        const savedData = localStorage.getItem('taxiLifeGameSave');
+        
+        if (savedData) {
+            try {
+                const data = JSON.parse(savedData);
+                
+                // Restore life mode stats
+                this.lifeMode = { ...this.lifeMode, ...data.lifeMode };
+                
+                // Restore time
+                this.gameTime = { ...this.gameTime, ...data.gameTime };
+                
+                // Restore daily goals
+                this.dailyGoals = { ...this.dailyGoals, ...data.dailyGoals };
+                
+                // Restore earnings
+                this.taxiMode.totalEarnings = data.taxiMode.totalEarnings || 0;
+                
+                // Restore car position
+                if (data.carPosition) {
+                    this.carPosition.set(data.carPosition.x, data.carPosition.y, data.carPosition.z);
+                    this.carRotation = data.carRotation || 0;
+                }
+                
+                console.log('Game progress loaded!');
+            } catch (error) {
+                console.error('Failed to load save data:', error);
+            }
+        }
+    }
+    
+    resetGameProgress() {
+        if (confirm('Are you sure you want to reset all progress? This cannot be undone!')) {
+            localStorage.removeItem('taxiLifeGameSave');
+            
+            // Reset all stats to default
+            this.lifeMode.money = 100;
+            this.lifeMode.energy = 100;
+            this.lifeMode.hunger = 100;
+            this.lifeMode.fuel = 100;
+            this.lifeMode.mood = 100;
+            
+            this.gameTime.hour = 8;
+            this.gameTime.minute = 0;
+            this.gameTime.dayCount = 1;
+            
+            this.dailyGoals.moneyEarned = 0;
+            this.dailyGoals.tripsCompleted = 0;
+            
+            this.taxiMode.totalEarnings = 0;
+            
+            this.carPosition.set(0, 0.4, 0);
+            this.carRotation = 0;
+            
+            console.log('Game progress reset!');
+            alert('Progress reset! Starting fresh.');
+        }
     }
     
     init() {
@@ -1275,6 +1360,12 @@ class DrivingGame {
                 case 'KeyQ':
                     this.sleepAtHome();
                     break;
+                case 'KeyP':
+                    this.saveGameProgress();
+                    break;
+                case 'KeyO':
+                    this.resetGameProgress();
+                    break;
             }
         });
         
@@ -1484,14 +1575,14 @@ class DrivingGame {
     updateTaxiMode() {
         if (!this.taxiMode.active) return;
         
-        // Check for passenger pickup
+        // Check for passenger pickup - can pick up ANY nearby passenger
         if (!this.taxiMode.passenger) {
             for (let passenger of this.availablePassengers) {
                 if (!passenger.pickedUp) {
                     const distance = this.carPosition.distanceTo(passenger.pickup);
                     if (distance < this.taxiMode.pickupRadius) {
                         this.pickupPassenger(passenger);
-                        break;
+                        break; // Pick up the first one we're close to
                     }
                 }
             }
@@ -1566,6 +1657,9 @@ class DrivingGame {
         
         // Spawn new passenger
         this.spawnNewPassenger();
+        
+        // Auto-save after completing a trip
+        this.saveGameProgress();
     }
     
     eatAtRestaurant() {
@@ -1635,18 +1729,34 @@ class DrivingGame {
                     <div>TAXI MODE: ON</div>
                     <div>Passenger: ${this.taxiMode.passenger.name}</div>
                     <div>Fare: $${this.taxiMode.fare}</div>
-                    <div>Distance to destination: ${distance.toFixed(0)}m</div>
+                    <div>Distance: ${distance.toFixed(0)}m</div>
                     <div>Total Earnings: $${this.taxiMode.totalEarnings}</div>
                 `;
             } else {
-                const nearestPassenger = this.findNearestPassenger();
-                const distance = nearestPassenger ? this.carPosition.distanceTo(nearestPassenger.pickup) : 0;
-                taxiInfo.innerHTML = `
-                    <div>TAXI MODE: ON</div>
-                    <div>Looking for passengers...</div>
-                    <div>Nearest passenger: ${distance.toFixed(0)}m away</div>
-                    <div>Total Earnings: $${this.taxiMode.totalEarnings}</div>
-                `;
+                // Show all available passengers with distances
+                const availableCount = this.availablePassengers.filter(p => !p.pickedUp).length;
+                let passengerList = `<div>TAXI MODE: ON</div>`;
+                passengerList += `<div>${availableCount} passengers available</div>`;
+                
+                // Show closest 3 passengers
+                const sortedPassengers = this.availablePassengers
+                    .filter(p => !p.pickedUp)
+                    .map(p => ({
+                        name: p.name,
+                        distance: this.carPosition.distanceTo(p.pickup)
+                    }))
+                    .sort((a, b) => a.distance - b.distance)
+                    .slice(0, 3);
+                
+                if (sortedPassengers.length > 0) {
+                    passengerList += `<div style="font-size: 11px; margin-top: 5px;">Nearest:</div>`;
+                    sortedPassengers.forEach(p => {
+                        passengerList += `<div style="font-size: 11px;">${p.name}: ${p.distance.toFixed(0)}m</div>`;
+                    });
+                }
+                
+                passengerList += `<div>Total Earnings: $${this.taxiMode.totalEarnings}</div>`;
+                taxiInfo.innerHTML = passengerList;
             }
         } else {
             taxiInfo.innerHTML = `
@@ -1677,16 +1787,16 @@ class DrivingGame {
     updateLifeMode() {
         if (!this.lifeMode.enabled) return;
         
-        // Decrease stats over time
-        this.lifeMode.energy -= 0.01; // Energy decreases while driving
-        this.lifeMode.hunger -= 0.008; // Hunger decreases slowly
-        this.lifeMode.fuel -= Math.abs(this.speed) * 0.002; // Fuel based on speed
+        // Decrease stats over time (SLOWED DOWN for better gameplay)
+        this.lifeMode.energy -= 0.003; // Reduced from 0.01 (3x slower)
+        this.lifeMode.hunger -= 0.002; // Reduced from 0.008 (4x slower)
+        this.lifeMode.fuel -= Math.abs(this.speed) * 0.0008; // Reduced from 0.002 (2.5x slower)
         
-        // Mood affected by other stats
+        // Mood affected by other stats (SLOWED DOWN)
         if (this.lifeMode.hunger < 30 || this.lifeMode.energy < 30) {
-            this.lifeMode.mood -= 0.01;
+            this.lifeMode.mood -= 0.003; // Reduced from 0.01
         } else if (this.lifeMode.hunger > 70 && this.lifeMode.energy > 70) {
-            this.lifeMode.mood = Math.min(100, this.lifeMode.mood + 0.005);
+            this.lifeMode.mood = Math.min(100, this.lifeMode.mood + 0.002); // Reduced from 0.005
         }
         
         // Clamp values
@@ -2315,8 +2425,12 @@ class DrivingGame {
     
     worldToMinimap(worldX, worldZ) {
         // Convert world coordinates to minimap coordinates
-        const mapX = this.minimap.centerX + (worldX * this.minimap.scale);
-        const mapY = this.minimap.centerY - (worldZ * this.minimap.scale); // Flip Z axis
+        // Center the map on the player's position
+        const relativeX = worldX - this.carPosition.x;
+        const relativeZ = worldZ - this.carPosition.z;
+        
+        const mapX = this.minimap.centerX + (relativeX * this.minimap.scale);
+        const mapY = this.minimap.centerY - (relativeZ * this.minimap.scale); // Flip Z axis
         return { x: mapX, y: mapY };
     }
     
@@ -2607,6 +2721,13 @@ class DrivingGame {
         this.updateRain();
         this.updateMinimap();
         this.updateCamera();
+        
+        // Auto-save every 30 seconds
+        this.autoSaveCounter++;
+        if (this.autoSaveCounter >= this.autoSaveInterval) {
+            this.saveGameProgress();
+            this.autoSaveCounter = 0;
+        }
         
         this.renderer.render(this.scene, this.camera);
     }
