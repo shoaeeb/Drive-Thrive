@@ -1335,12 +1335,22 @@ class DrivingGame {
     }
     
     updateCarPhysics() {
-        // Handle input
-        if (this.keys.forward) {
-            this.speed = Math.min(this.speed + this.acceleration, this.maxSpeed);
-        }
-        if (this.keys.backward) {
-            this.speed = Math.max(this.speed - this.acceleration, -this.maxSpeed * 0.5);
+        // Check if out of fuel
+        if (this.lifeMode.fuel <= 0) {
+            // Car stops when out of fuel
+            this.speed *= 0.8; // Rapid deceleration
+            if (Math.abs(this.speed) < 0.1) {
+                this.speed = 0; // Complete stop
+            }
+        } else {
+            // Normal driving controls
+            // Handle input
+            if (this.keys.forward) {
+                this.speed = Math.min(this.speed + this.acceleration, this.maxSpeed);
+            }
+            if (this.keys.backward) {
+                this.speed = Math.max(this.speed - this.acceleration, -this.maxSpeed * 0.5);
+            }
         }
         
         // Steering (only when moving)
@@ -1515,16 +1525,31 @@ class DrivingGame {
         const passenger = this.taxiMode.passenger;
         const fare = this.taxiMode.fare;
         
-        // Add mood bonus to fare
-        const moodBonus = this.lifeMode.mood > 80 ? Math.floor(fare * 0.2) : 0;
-        const totalFare = fare + moodBonus;
+        // Mood affects fare
+        let fareMultiplier = 1.0;
+        if (this.lifeMode.mood > 80) {
+            fareMultiplier = 1.2; // 20% bonus for high mood
+        } else if (this.lifeMode.mood <= 0) {
+            fareMultiplier = 0.5; // 50% penalty for zero mood (bad service)
+        } else if (this.lifeMode.mood < 30) {
+            fareMultiplier = 0.7; // 30% penalty for low mood
+        }
+        
+        const totalFare = Math.floor(fare * fareMultiplier);
+        const bonusAmount = totalFare - fare;
         
         this.taxiMode.totalEarnings += totalFare;
         this.lifeMode.money += totalFare;
         this.dailyGoals.moneyEarned += totalFare;
         this.dailyGoals.tripsCompleted++;
         
-        console.log(`Dropped off ${passenger.name}! Earned $${totalFare}${moodBonus > 0 ? ` (Bonus: $${moodBonus})` : ''}`);
+        let message = `Dropped off ${passenger.name}! Earned $${totalFare}`;
+        if (bonusAmount > 0) {
+            message += ` (Bonus: $${bonusAmount})`;
+        } else if (bonusAmount < 0) {
+            message += ` (Penalty: $${Math.abs(bonusAmount)})`;
+        }
+        console.log(message);
         
         // Remove passenger and destination marker
         this.scene.remove(passenger.visual);
@@ -1670,6 +1695,9 @@ class DrivingGame {
         this.lifeMode.fuel = Math.max(0, Math.min(100, this.lifeMode.fuel));
         this.lifeMode.mood = Math.max(0, Math.min(100, this.lifeMode.mood));
         
+        // Penalties for low stats
+        this.applyStatPenalties();
+        
         // Check for low fuel
         if (this.lifeMode.fuel < 10) {
             this.maxSpeed = 20; // Reduced speed when low on fuel
@@ -1682,6 +1710,51 @@ class DrivingGame {
         
         // Update UI
         this.updateLifeModeUI();
+    }
+    
+    applyStatPenalties() {
+        // Energy at 0% - Car becomes very slow and hard to control
+        if (this.lifeMode.energy <= 0) {
+            this.maxSpeed = Math.min(this.maxSpeed, 15); // Very slow
+            this.acceleration = 0.1; // Sluggish acceleration
+            this.turnSpeed = 0.03; // Poor steering
+        } else if (this.lifeMode.energy < 20) {
+            this.acceleration = 0.2; // Reduced acceleration
+            this.turnSpeed = 0.05; // Reduced steering
+        } else {
+            this.acceleration = 0.3; // Normal acceleration
+            this.turnSpeed = 0.08; // Normal steering
+        }
+        
+        // Hunger at 0% - Lose money over time (medical costs) and mood drops fast
+        if (this.lifeMode.hunger <= 0) {
+            this.lifeMode.money -= 0.05; // Losing money (health issues)
+            this.lifeMode.mood = Math.max(0, this.lifeMode.mood - 0.05); // Mood drops fast
+            this.lifeMode.energy = Math.max(0, this.lifeMode.energy - 0.02); // Energy drains faster
+        }
+        
+        // Mood at 0% - Passengers pay less (bad service)
+        // This is handled in dropoffPassenger() method
+        
+        // Critical state - All stats low
+        if (this.lifeMode.energy <= 0 && this.lifeMode.hunger <= 0) {
+            // Game over warning
+            this.showCriticalWarning();
+        }
+    }
+    
+    showCriticalWarning() {
+        const promptElement = document.getElementById('interactionPrompt');
+        if (promptElement) {
+            promptElement.innerHTML = `
+                <div style="background: rgba(139, 0, 0, 0.9); padding: 20px; border-radius: 10px; border: 3px solid red;">
+                    <h2 style="color: #FF0000; margin: 0 0 10px 0;">⚠️ CRITICAL CONDITION! ⚠️</h2>
+                    <p style="margin: 5px 0;">You're exhausted and starving!</p>
+                    <p style="margin: 5px 0;">Find food and rest immediately!</p>
+                </div>
+            `;
+            promptElement.style.display = 'block';
+        }
     }
     
     updateGameTime() {
@@ -1770,14 +1843,27 @@ class DrivingGame {
         const timeString = `${String(Math.floor(this.gameTime.hour)).padStart(2, '0')}:${String(Math.floor(this.gameTime.minute)).padStart(2, '0')}`;
         const dayPeriod = this.gameTime.hour < 12 ? 'AM' : 'PM';
         
+        // Stat warning colors and messages
+        const energyColor = this.lifeMode.energy <= 0 ? 'red' : (this.lifeMode.energy < 20 ? 'orange' : 'white');
+        const energyWarning = this.lifeMode.energy <= 0 ? ' ⚠️ EXHAUSTED!' : '';
+        
+        const hungerColor = this.lifeMode.hunger <= 0 ? 'red' : (this.lifeMode.hunger < 20 ? 'orange' : 'white');
+        const hungerWarning = this.lifeMode.hunger <= 0 ? ' ⚠️ STARVING!' : '';
+        
+        const fuelColor = this.lifeMode.fuel <= 0 ? 'red' : (this.lifeMode.fuel < 20 ? 'orange' : 'white');
+        const fuelWarning = this.lifeMode.fuel <= 0 ? ' ⚠️ EMPTY!' : '';
+        
+        const moodColor = this.lifeMode.mood <= 0 ? 'red' : (this.lifeMode.mood < 30 ? 'orange' : 'white');
+        const moodWarning = this.lifeMode.mood <= 0 ? ' ⚠️ DEPRESSED!' : '';
+        
         lifeModeInfo.innerHTML = `
             <div style="background: rgba(0,0,0,0.7); padding: 10px; border-radius: 5px;">
                 <div><strong>Day ${this.gameTime.dayCount}</strong> | ${timeString} ${dayPeriod}</div>
                 <div>💰 Money: $${Math.floor(this.lifeMode.money)}</div>
-                <div>⚡ Energy: ${Math.floor(this.lifeMode.energy)}%</div>
-                <div>🍔 Hunger: ${Math.floor(this.lifeMode.hunger)}%</div>
-                <div>⛽ Fuel: ${Math.floor(this.lifeMode.fuel)}%</div>
-                <div>😊 Mood: ${Math.floor(this.lifeMode.mood)}%</div>
+                <div style="color: ${energyColor};">⚡ Energy: ${Math.floor(this.lifeMode.energy)}%${energyWarning}</div>
+                <div style="color: ${hungerColor};">🍔 Hunger: ${Math.floor(this.lifeMode.hunger)}%${hungerWarning}</div>
+                <div style="color: ${fuelColor};">⛽ Fuel: ${Math.floor(this.lifeMode.fuel)}%${fuelWarning}</div>
+                <div style="color: ${moodColor};">😊 Mood: ${Math.floor(this.lifeMode.mood)}%${moodWarning}</div>
                 <hr style="margin: 5px 0;">
                 <div><strong>Daily Goals:</strong></div>
                 <div>💵 ${this.dailyGoals.moneyEarned}/${this.dailyGoals.moneyTarget}</div>
